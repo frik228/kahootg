@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Play | Excel Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Мягкий шрифт и сглаживание */
+        body {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Исправление слипшегося текста */
+        .quiz-text {
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            line-height: 1.6;
+            letter-spacing: 0.3px;
+        }
+        
+        /* Анимация появления */
+        .fade-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { 
+            from { opacity: 0; transform: translateY(5px); } 
+            to { opacity: 1; transform: translateY(0); } 
+        }
+
+        /* Стили для работы над ошибками (приятные пастельные тона) */
+        .review-card-correct {
+            background-color: #f0fdf4; 
+            border: 1px solid #bbf7d0; 
+            color: #166534;
+            padding: 1rem;
+            border-radius: 12px;
+            margin-bottom: 0.75rem;
+        }
+
+        .review-card-wrong {
+            background-color: #fef2f2; 
+            border: 1px solid #fecca7; 
+            color: #991b1b;
+            padding: 1rem;
+            border-radius: 12px;
+            margin-bottom: 0.75rem;
+        }
+
+        /* Стилизация скроллбара для обзора ошибок */
+        #review-section::-webkit-scrollbar { width: 6px; }
+        #review-section::-webkit-scrollbar-track { background: #f1f5f9; }
+        #review-section::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen flex items-center justify-center p-4 font-sans text-slate-900">
+
+    <div id="game-card" class="max-w-2xl w-full bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-10 fade-in">
+        <div class="flex justify-between items-center mb-8">
+            <div class="flex flex-col">
+                <span id="progress-text" class="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Загрузка...</span>
+                <div class="h-1 w-32 bg-slate-100 rounded-full mt-2 overflow-hidden">
+                    <div id="progress-bar" class="h-full bg-sky-500 transition-all duration-700" style="width: 0%"></div>
+                </div>
+            </div>
+            <button onclick="showStats()" class="text-[10px] font-bold text-slate-400 hover:text-rose-500 uppercase tracking-widest transition-colors">
+                Завершить
+            </button>
+        </div>
+
+        <h2 id="question" class="text-xl md:text-2xl font-semibold text-slate-800 mb-8 quiz-text tracking-tight"></h2>
+        
+        <div id="answers" class="grid grid-cols-1 gap-3 mb-10"></div>
+
+        <div class="flex justify-between items-center border-t border-slate-50 pt-6">
+            <button onclick="changeQuestion(-1)" id="prevBtn" class="px-4 py-2 text-sm font-medium text-slate-400 hover:text-sky-600 disabled:opacity-0 transition-all">
+                ← Назад
+            </button>
+            <button onclick="changeQuestion(1)" id="nextBtn" class="px-6 py-2.5 bg-slate-800 text-white text-sm rounded-lg font-bold hover:bg-slate-700 transition-all shadow-sm">
+                Далее
+            </button>
+        </div>
+    </div>
+
+    <div id="stats-card" class="hidden max-w-2xl w-full bg-white rounded-2xl shadow-xl p-6 md:p-10 fade-in">
+        <div class="text-center mb-8">
+            <h2 class="text-2xl font-bold text-slate-800">Результат теста</h2>
+            <div id="final-score" class="text-5xl font-light text-sky-600 my-4">0 / 0</div>
+            <p id="score-comment" class="text-slate-400 text-sm italic"></p>
+        </div>
+
+        <div id="review-section" class="space-y-3 max-h-[350px] overflow-y-auto pr-3 mb-8 py-2">
+            </div>
+
+        <button onclick="location.href='index.html'" class="w-full py-4 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-900 transition-all">
+            Вернуться в меню
+        </button>
+    </div>
+
+    <script>
+        let current = 0;
+        let quizData = [];
+        let userChoices = [];
+
+        async function loadQuiz() {
+            try {
+                const res = await fetch("/quiz");
+                quizData = await res.json();
+                userChoices = new Array(quizData.length).fill(null);
+                if (quizData.length > 0) showQuestion();
+            } catch (err) { console.error("Ошибка:", err); }
+        }
+
+        function showQuestion() {
+            const q = quizData[current];
+            const ansContainer = document.getElementById("answers");
+            
+            document.getElementById("question").innerText = q.question;
+            document.getElementById("progress-text").innerText = `Вопрос ${current + 1} из ${quizData.length}`;
+            document.getElementById("progress-bar").style.width = `${((current + 1) / quizData.length) * 100}%`;
+            
+            document.getElementById("prevBtn").disabled = (current === 0);
+            document.getElementById("nextBtn").disabled = (current === quizData.length - 1);
+
+            ansContainer.innerHTML = "";
+            q.options.forEach(opt => {
+                const btn = document.createElement("button");
+                const isSelected = userChoices[current] === opt;
+                btn.className = `w-full text-left p-4 rounded-xl border transition-all text-sm ${isSelected ? 'border-sky-500 bg-sky-50 text-sky-700 font-semibold' : 'border-slate-200 bg-white hover:border-slate-400 text-slate-600'}`;
+                btn.innerText = opt;
+
+                btn.onclick = () => {
+                    userChoices[current] = opt;
+                    showQuestion();
+                    setTimeout(() => { if (current < quizData.length - 1) changeQuestion(1); }, 400);
+                };
+                ansContainer.appendChild(btn);
+            });
+        }
+
+        function changeQuestion(step) {
+            current += step;
+            showQuestion();
+        }
+
+        function showStats() {
+            let correctCount = 0;
+            const reviewContainer = document.getElementById("review-section");
+            reviewContainer.innerHTML = "";
+
+            quizData.forEach((q, i) => {
+                const isCorrect = userChoices[i] === q.answer;
+                if (isCorrect) correctCount++;
+
+                const card = document.createElement("div");
+                card.className = isCorrect ? 'review-card-correct text-sm' : 'review-card-wrong text-sm';
+                
+                card.innerHTML = `
+                    <div class="flex justify-between mb-1 opacity-60 text-[10px] font-bold uppercase">
+                        <span>${isCorrect ? 'Верно' : 'Ошибка'}</span>
+                        <span>№${i + 1}</span>
+                    </div>
+                    <p class="font-semibold mb-2">${q.question}</p>
+                    <div class="opacity-80">
+                        <p>Ваш ответ: ${userChoices[i] || '—'}</p>
+                        ${!isCorrect ? `<p class="font-bold">Правильно: ${q.answer}</p>` : ''}
+                    </div>
+                `;
+                reviewContainer.appendChild(card);
+            });
+
+            document.getElementById("game-card").classList.add("hidden");
+            document.getElementById("stats-card").classList.remove("hidden");
+            document.getElementById("final-score").innerText = `${correctCount} / ${quizData.length}`;
+        }
+
+        loadQuiz();
+    </script>
+</body>
+</html>
